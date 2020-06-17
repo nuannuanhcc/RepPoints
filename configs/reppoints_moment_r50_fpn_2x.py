@@ -1,6 +1,8 @@
 # model settings
 norm_cfg = dict(type='GN', num_groups=32, requires_grad=True)
-
+with_reid = True
+img_size = (1500, 900)  # (1333, 800), (1500, 900)
+work_dir = './work_dirs/reppoints_moment_r50_fpn_2x_6_15_8'
 model = dict(
     type='RepPointsDetector',
     pretrained='modelzoo://resnet50',
@@ -21,7 +23,7 @@ model = dict(
         norm_cfg=norm_cfg),
     bbox_head=dict(
         type='RepPointsHead',
-        num_classes=81,
+        num_classes=2,
         in_channels=256,
         feat_channels=256,
         point_feat_channels=256,
@@ -39,7 +41,12 @@ model = dict(
             loss_weight=1.0),
         loss_bbox_init=dict(type='SmoothL1Loss', beta=0.11, loss_weight=0.5),
         loss_bbox_refine=dict(type='SmoothL1Loss', beta=0.11, loss_weight=1.0),
-        transform_method='moment'))
+        transform_method='moment'),
+    bbox_roi_extractor=dict(
+        type='SingleRoIExtractor',
+        roi_layer=dict(type='RoIAlign', out_size=7, sample_num=2),
+        out_channels=256,
+        featmap_strides=[8, 16, 32, 64]))
 # training and testing settings
 train_cfg = dict(
     init=dict(
@@ -56,57 +63,76 @@ train_cfg = dict(
             ignore_iof_thr=-1),
         allowed_border=-1,
         pos_weight=-1,
-        debug=False))
+        debug=False),
+    with_reid=with_reid)
 test_cfg = dict(
     nms_pre=1000,
     min_bbox_size=0,
     score_thr=0.05,
     nms=dict(type='nms', iou_thr=0.5),
-    max_per_img=100)
+    max_per_img=100,
+    with_reid=with_reid)
 # dataset settings
 dataset_type = 'SysuDataset'
 data_root = 'data/sysu/'
 img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
 data = dict(
-    imgs_per_gpu=2,
-    workers_per_gpu=2,
+    imgs_per_gpu=3,
+    workers_per_gpu=3,
     train=dict(
         type=dataset_type,
         ann_file=data_root + 'annotations/train.json',
         img_prefix=data_root + 'images/',
-        img_scale=(1333, 800),
+        img_scale=img_size,
         img_norm_cfg=img_norm_cfg,
         size_divisor=32,
         flip_ratio=0.5,
         with_mask=False,
         with_crowd=False,
-        with_label=True),
+        with_label=True,
+        with_reid=with_reid),
     val=dict(
         type=dataset_type,
         ann_file=data_root + 'annotations/val.json',
         img_prefix=data_root + 'images/',
-        img_scale=(1333, 800),
+        img_scale=img_size,
         img_norm_cfg=img_norm_cfg,
         size_divisor=32,
         flip_ratio=0,
         with_mask=False,
         with_crowd=False,
-        with_label=True),
+        with_label=True,
+        with_reid=with_reid),
     test=dict(
         type=dataset_type,
-        ann_file=data_root + 'annotations/instances_val2017.json',
-        img_prefix=data_root + 'val2017/',
-        img_scale=(1333, 800),
+        ann_file=data_root + 'annotations/test.json',
+        img_prefix=data_root + 'images/',
+        img_scale=img_size,
         img_norm_cfg=img_norm_cfg,
         size_divisor=32,
         flip_ratio=0,
         with_mask=False,
         with_crowd=False,
         with_label=False,
-        test_mode=True))
+        test_mode=True,
+        with_reid=with_reid),
+    query=dict(
+        type=dataset_type,
+        ann_file=data_root + 'annotations/query.json',
+        img_prefix=data_root + 'images/',
+        img_scale=img_size,
+        img_norm_cfg=img_norm_cfg,
+        size_divisor=32,
+        flip_ratio=0,
+        with_mask=False,
+        with_crowd=False,
+        with_label=False,
+        with_reid=with_reid,
+        test_mode=True,
+        is_query=True))
 # optimizer
-optimizer = dict(type='SGD', lr=0.01, momentum=0.9, weight_decay=0.0001)
+optimizer = dict(type='SGD', lr=0.001, momentum=0.9, weight_decay=0.0001)
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 # learning policy
 lr_config = dict(
@@ -129,7 +155,6 @@ total_epochs = 24
 device_ids = range(8)
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-work_dir = './work_dirs/reppoints_moment_r50_fpn_2x'
 load_from = None
 resume_from = None
 auto_resume = True
