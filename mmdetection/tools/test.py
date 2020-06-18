@@ -158,14 +158,17 @@ def main():
 
     # build the dataloader
     # TODO: support multiple images per gpu (only minor changes are needed)
-    dataset = build_dataset(cfg.data.test)
-    data_loader = build_dataloader(
-        dataset,
-        imgs_per_gpu=1,
-        workers_per_gpu=cfg.data.workers_per_gpu,
-        dist=distributed,
-        shuffle=False)
-
+    dataset = [build_dataset(cfg.data.test)]
+    if cfg.data.test.with_reid:
+        dataset.append(build_dataset(cfg.data.query))
+    data_loader = [
+        build_dataloader(
+            ds,
+            imgs_per_gpu=1,
+            workers_per_gpu=cfg.data.workers_per_gpu,
+            dist=distributed,
+            shuffle=False)
+        for ds in dataset]
     # build the model and load checkpoint
     model = build_detector(cfg.model, train_cfg=None, test_cfg=cfg.test_cfg)
     fp16_cfg = cfg.get('fp16', None)
@@ -181,17 +184,26 @@ def main():
 
     if not distributed:
         model = MMDataParallel(model, device_ids=[0])
-        outputs = single_gpu_test(model, data_loader, args.show)
+        outputs = [single_gpu_test(model, dl, args.show) for dl in data_loader]
     else:
         model = MMDistributedDataParallel(model.cuda())
-        outputs = multi_gpu_test(model, data_loader, args.tmpdir)
+        outputs = [multi_gpu_test(model, dl, args.tmpdir) for dl in data_loader]
 
     rank, _ = get_dist_info()
     if args.out and rank == 0:
-        print('\nwriting results to {}'.format(args.out))
-        mmcv.dump(outputs, args.out)
+        print('Starting evaluate {}'.format(args.checkpoint))
+        result = dataset[0].evaluate(outputs, dataset)
+        # args.checkpoint =
+        with open(os.path.join(cfg.work_dir, "eva_result.txt"), "a") as fid:
+            fid.write(args.checkpoint+'\n')
+            fid.write(result+'\n')
+
         eval_types = args.eval
-        if eval_types:
+        if not cfg.data.test.with_reid:
+            outputs = outputs[0]
+            dataset = dataset[0]
+            print('\nwriting results to {}'.format(args.out))
+            mmcv.dump(result, args.out)
             print('Starting evaluate {}'.format(' and '.join(eval_types)))
             if eval_types == ['proposal_fast']:
                 result_file = args.out
@@ -210,14 +222,14 @@ def main():
                         coco_eval(result_files, eval_types, dataset.coco)
 
     # Save predictions in the COCO json format
-    if args.json_out and rank == 0:
-        if not isinstance(outputs[0], dict):
-            results2json(dataset, outputs, args.json_out)
-        else:
-            for name in outputs[0]:
-                outputs_ = [out[name] for out in outputs]
-                result_file = args.json_out + '.{}'.format(name)
-                results2json(dataset, outputs_, result_file)
+    # if args.json_out and rank == 0:
+    #     if not isinstance(outputs[0], dict):
+    #         results2json(dataset, outputs, args.json_out)
+    #     else:
+    #         for name in outputs[0]:
+    #             outputs_ = [out[name] for out in outputs]
+    #             result_file = args.json_out + '.{}'.format(name)
+                # results2json(dataset, outputs_, result_file)
 
 
 if __name__ == '__main__':

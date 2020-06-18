@@ -125,7 +125,10 @@ def anchor_target_single(flat_anchors,
     num_valid_anchors = anchors.shape[0]
     bbox_targets = torch.zeros_like(anchors)
     bbox_weights = torch.zeros_like(anchors)
-    labels = anchors.new_zeros(num_valid_anchors, dtype=torch.long)
+    if gt_labels.dim() == 2:
+        labels = anchors.new_zeros([num_valid_anchors, 2], dtype=torch.long)
+    else:
+        labels = anchors.new_zeros(num_valid_anchors, dtype=torch.long)
     label_weights = anchors.new_zeros(num_valid_anchors, dtype=torch.float)
 
     pos_inds = sampling_result.pos_inds

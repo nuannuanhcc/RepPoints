@@ -52,6 +52,8 @@ class CustomDataset(Dataset):
                  with_mask=True,
                  with_crowd=True,
                  with_label=True,
+                 with_reid=False,
+                 is_query=False,
                  with_semantic_seg=False,
                  seg_prefix=None,
                  seg_scale_factor=1,
@@ -62,6 +64,8 @@ class CustomDataset(Dataset):
                  skip_img_without_anno=True,
                  test_mode=False):
         # prefix of images path
+        self.with_reid = with_reid
+        self.is_query = is_query
         self.img_prefix = img_prefix
 
         # load annotations (and proposals)
@@ -303,9 +307,14 @@ class CustomDataset(Dataset):
         else:
             proposal = None
 
-        def prepare_single(img, scale, flip, proposal=None):
+        ann = self.get_ann_info(idx)
+        gt_bbox = ann['bboxes']
+
+        def prepare_single(gt_bbox, img, scale, flip, proposal=None):
             _img, img_shape, pad_shape, scale_factor = self.img_transform(
                 img, scale, flip, keep_ratio=self.resize_keep_ratio)
+            gt_bbox = self.bbox_transform(gt_bbox, img_shape, scale_factor,
+                                            flip)
             _img = to_tensor(_img)
             _img_meta = dict(
                 ori_shape=(img_info['height'], img_info['width'], 3),
@@ -326,24 +335,30 @@ class CustomDataset(Dataset):
                 _proposal = to_tensor(_proposal)
             else:
                 _proposal = None
-            return _img, _img_meta, _proposal
+            return gt_bbox, _img, _img_meta, _proposal
 
         imgs = []
         img_metas = []
         proposals = []
+        gt_bboxes = []
         for scale in self.img_scales:
-            _img, _img_meta, _proposal = prepare_single(
-                img, scale, False, proposal)
+            gt_bbox, _img, _img_meta, _proposal = prepare_single(
+                gt_bbox, img, scale, False, proposal)
+            gt_bboxes.append(gt_bbox)
             imgs.append(_img)
             img_metas.append(DC(_img_meta, cpu_only=True))
             proposals.append(_proposal)
             if self.flip_ratio > 0:
-                _img, _img_meta, _proposal = prepare_single(
-                    img, scale, True, proposal)
+                gt_bbox, _img, _img_meta, _proposal = prepare_single(
+                    gt_bbox, img, scale, True, proposal)
+                gt_bboxes.append(gt_bbox)
                 imgs.append(_img)
                 img_metas.append(DC(_img_meta, cpu_only=True))
                 proposals.append(_proposal)
-        data = dict(img=imgs, img_meta=img_metas)
+        if self.is_query:
+            data = dict(img=imgs, img_meta=img_metas, gt_box=gt_bboxes)
+        else:
+            data = dict(img=imgs, img_meta=img_metas)
         if self.proposals is not None:
             data['proposals'] = proposals
         return data

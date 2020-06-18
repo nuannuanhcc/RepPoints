@@ -42,6 +42,9 @@ class CocoDataset(CustomDataset):
         img_id = self.img_infos[idx]['id']
         ann_ids = self.coco.getAnnIds(imgIds=[img_id])
         ann_info = self.coco.loadAnns(ann_ids)
+        if self.is_query:
+            index = [ann['pid'] == idx for ann in ann_info]
+            ann_info = np.array(ann_info)[index].tolist()
         return self._parse_ann_info(ann_info, self.with_mask)
 
     def _filter_imgs(self, min_size=32):
@@ -88,7 +91,10 @@ class CocoDataset(CustomDataset):
                 gt_bboxes_ignore.append(bbox)
             else:
                 gt_bboxes.append(bbox)
-                gt_labels.append(self.cat2label[ann['category_id']])
+                if self.with_reid:
+                    gt_labels.append([self.cat2label[ann['category_id']], ann['pid']])
+                else:
+                    gt_labels.append(self.cat2label[ann['category_id']])
             if with_mask:
                 gt_masks.append(self.coco.annToMask(ann))
                 mask_polys = [

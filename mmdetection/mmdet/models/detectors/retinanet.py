@@ -9,8 +9,9 @@ class RetinaNet(SingleStageDetector):
                  backbone,
                  neck,
                  bbox_head,
+                 bbox_roi_extractor,
                  train_cfg=None,
                  test_cfg=None,
                  pretrained=None):
-        super(RetinaNet, self).__init__(backbone, neck, bbox_head, train_cfg,
+        super(RetinaNet, self).__init__(backbone, neck, bbox_head, bbox_roi_extractor, train_cfg,
                                         test_cfg, pretrained)
