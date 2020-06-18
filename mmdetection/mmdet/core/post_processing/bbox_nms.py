@@ -3,7 +3,8 @@ import torch
 from mmdet.ops.nms import nms_wrapper
 
 
-def multiclass_nms(multi_bboxes,
+def multiclass_nms(mlvl_pts_coords,
+                   multi_bboxes,
                    multi_scores,
                    score_thr,
                    nms_cfg,
@@ -27,7 +28,7 @@ def multiclass_nms(multi_bboxes,
             are 0-based.
     """
     num_classes = multi_scores.shape[1]
-    bboxes, labels = [], []
+    pts_coords, bboxes, labels = [], [], []
     nms_cfg_ = nms_cfg.copy()
     nms_type = nms_cfg_.pop('type', 'nms')
     nms_op = getattr(nms_wrapper, nms_type)
@@ -40,26 +41,32 @@ def multiclass_nms(multi_bboxes,
             _bboxes = multi_bboxes[cls_inds, :]
         else:
             _bboxes = multi_bboxes[cls_inds, i * 4:(i + 1) * 4]
+        _pts_coords = mlvl_pts_coords[cls_inds, :]
         _scores = multi_scores[cls_inds, i]
         if score_factors is not None:
             _scores *= score_factors[cls_inds]
         cls_dets = torch.cat([_bboxes, _scores[:, None]], dim=1)
-        cls_dets, _ = nms_op(cls_dets, **nms_cfg_)
+        cls_dets, nms_inds = nms_op(cls_dets, **nms_cfg_)
+        cls_pts = _pts_coords[nms_inds, :]
         cls_labels = multi_bboxes.new_full((cls_dets.shape[0], ),
                                            i - 1,
                                            dtype=torch.long)
+        pts_coords.append(cls_pts)
         bboxes.append(cls_dets)
         labels.append(cls_labels)
     if bboxes:
+        pts_coords = torch.cat(pts_coords)
         bboxes = torch.cat(bboxes)
         labels = torch.cat(labels)
         if bboxes.shape[0] > max_num:
             _, inds = bboxes[:, -1].sort(descending=True)
             inds = inds[:max_num]
+            pts_coords = pts_coords[inds]
             bboxes = bboxes[inds]
             labels = labels[inds]
     else:
+        pts_coords = multi_bboxes.new_zeros((0, 18))
         bboxes = multi_bboxes.new_zeros((0, 5))
         labels = multi_bboxes.new_zeros((0, ), dtype=torch.long)
 
-    return bboxes, labels
+    return pts_coords, bboxes, labels

@@ -519,7 +519,7 @@ class RepPointsHead(nn.Module):
             'loss_pts_init': losses_pts_init,
             'loss_pts_refine': losses_pts_refine
         }
-        return loss_dict_all, [bbox_pred_init], labels_list_init
+        return loss_dict_all, [bbox_pred_init, pts_coord_init], labels_list_init
 
     def get_bboxes(self,
                    cls_scores,
@@ -541,6 +541,15 @@ class RepPointsHead(nn.Module):
             for i in range(num_levels)
         ]
         result_list = []
+
+        featmap_sizes = [featmap.size()[-2:] for featmap in cls_scores]
+
+        center_list, valid_flag_list = self.get_points(featmap_sizes,
+                                                       img_metas)
+        pts_coordinate_preds_init = self.offset_to_pts(center_list,
+                                                       pts_preds_refine)
+
+
         for img_id in range(len(img_metas)):
             cls_score_list = [
                 cls_scores[i][img_id].detach() for i in range(num_levels)
@@ -549,9 +558,13 @@ class RepPointsHead(nn.Module):
                 bbox_preds_refine[i][img_id].detach()
                 for i in range(num_levels)
             ]
+            pts_coordinate_list = [
+                pts_coordinate_preds_init[i][img_id].detach()
+                for i in range(num_levels)
+            ]
             img_shape = img_metas[img_id]['img_shape']
             scale_factor = img_metas[img_id]['scale_factor']
-            proposals = self.get_bboxes_single(cls_score_list, bbox_pred_list,
+            proposals = self.get_bboxes_single(cls_score_list, bbox_pred_list, pts_coordinate_list,
                                                mlvl_points, img_shape,
                                                scale_factor, cfg, rescale, nms)
             result_list.append(proposals)
@@ -560,6 +573,7 @@ class RepPointsHead(nn.Module):
     def get_bboxes_single(self,
                           cls_scores,
                           bbox_preds,
+                          pts_coords,
                           mlvl_points,
                           img_shape,
                           scale_factor,
@@ -569,8 +583,10 @@ class RepPointsHead(nn.Module):
         assert len(cls_scores) == len(bbox_preds) == len(mlvl_points)
         mlvl_bboxes = []
         mlvl_scores = []
-        for i_lvl, (cls_score, bbox_pred, points) in enumerate(
-                zip(cls_scores, bbox_preds, mlvl_points)):
+        mlvl_pts_coords = []
+
+        for i_lvl, (cls_score, bbox_pred, pts_coord, points) in enumerate(
+                zip(cls_scores, bbox_preds, pts_coords, mlvl_points)):
             assert cls_score.size()[-2:] == bbox_pred.size()[-2:]
             cls_score = cls_score.permute(1, 2,
                                           0).reshape(-1, self.cls_out_channels)
@@ -588,6 +604,7 @@ class RepPointsHead(nn.Module):
                 _, topk_inds = max_scores.topk(nms_pre)
                 points = points[topk_inds, :]
                 bbox_pred = bbox_pred[topk_inds, :]
+                pts_coord = pts_coord[topk_inds, :]
                 scores = scores[topk_inds, :]
             bbox_pos_center = torch.cat([points[:, :2], points[:, :2]], dim=1)
             bboxes = bbox_pred * self.point_strides[i_lvl] + bbox_pos_center
@@ -598,17 +615,21 @@ class RepPointsHead(nn.Module):
             bboxes = torch.stack([x1, y1, x2, y2], dim=-1)
             mlvl_bboxes.append(bboxes)
             mlvl_scores.append(scores)
+            mlvl_pts_coords.append(pts_coord)
+
         mlvl_bboxes = torch.cat(mlvl_bboxes)
         if rescale:
             mlvl_bboxes /= mlvl_bboxes.new_tensor(scale_factor)
         mlvl_scores = torch.cat(mlvl_scores)
+        mlvl_pts_coords = torch.cat(mlvl_pts_coords)
         if self.use_sigmoid_cls:
             padding = mlvl_scores.new_zeros(mlvl_scores.shape[0], 1)
             mlvl_scores = torch.cat([padding, mlvl_scores], dim=1)
         if nms:
-            det_bboxes, det_labels = multiclass_nms(mlvl_bboxes, mlvl_scores,
+            det_pts, det_bboxes, det_labels = multiclass_nms(mlvl_pts_coords, mlvl_bboxes, mlvl_scores,
                                                     cfg.score_thr, cfg.nms,
                                                     cfg.max_per_img)
-            return det_bboxes, det_labels
+            # det_pts_ = self.points2bbox(det_bboxes, y_first=False)
+            return det_bboxes, det_labels, det_pts
         else:
             return mlvl_bboxes, mlvl_scores

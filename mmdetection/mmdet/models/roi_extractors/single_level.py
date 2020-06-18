@@ -87,7 +87,11 @@ class SingleRoIExtractor(nn.Module):
         return new_rois
 
     @force_fp32(apply_to=('feats', ), out_fp16=True)
-    def forward(self, feats, rois, roi_scale_factor=None):
+    def forward(self, feats, rois, roi_scale_factor=None, use_point_feat=True):
+        if use_point_feat:
+            roi_feats = self.extract_point_feat(feats, rois)
+            return roi_feats
+
         if len(feats) == 1:
             return self.roi_layers[0](feats[0], rois)
 
@@ -105,3 +109,56 @@ class SingleRoIExtractor(nn.Module):
                 roi_feats_t = self.roi_layers[i](feats[i], rois_)
                 roi_feats[inds] = roi_feats_t
         return roi_feats
+
+    def extract_point_feat(self, feats, rois):
+        """
+        Args:
+            rois[0](roi_box): shape (n, 5) [batch_ind, x1, y1, x2, y2]
+            rois[1](roi_pt): shape (n, 19) [batch_ind, x1, y1, ..., x18, y18]
+            feats: shape list[Tensor] [(N, C, H, W)] * num_layer, a list of feats corresponding to different FPN layer
+        Returns:
+            Tensor: shape (n, C, 9, 1)
+        """
+
+        roi_box, roi_pt = rois
+        num_levels = len(feats)  # 4
+        target_lvls = self.map_roi_levels(roi_box, num_levels)  # n
+        roi_feats = feats[0].new_zeros(
+            roi_pt.size(0), self.out_channels, 9, 1)  # n*C*9*1
+        for i in range(num_levels):
+            inds = target_lvls == i
+            if inds.any():
+                roi_pt_ = roi_pt[inds, :]
+                roi_feats_t = self.roi_point(feats[i], roi_pt_, self.featmap_strides[i])
+                roi_feats[inds] = roi_feats_t
+                return roi_feats
+
+    def roi_point(self, feats, rois, s):
+        """
+        feats: (N,C,H,W) all image feats in a single FPN layer
+        rois: (n1, 19) the indexed roi that fit this FPN layer
+        s:  the stride of this FPN layer
+        """
+        rois_feat = []
+        for i in range(feats.shape[0]):
+            inds = rois[:, 0].int() == i
+            if inds.any():
+                point = rois[inds][:, 1:] / s  # n1*18
+                point = point.view(point.shape[0], -1, 1, 2)  # n1*9*1*2
+                feat = feats[i].unsqueeze(0)  # 1*c*h*w
+                for j in range(point.shape[0]):
+                    rois_feat.append(nn.functional.grid_sample(feat, point[j].unsqueeze(0)))
+        return torch.cat(rois_feat, dim=0)  # n1*C*9*1
+
+
+
+
+
+
+
+
+
+
+
+
+
