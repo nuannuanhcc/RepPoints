@@ -1,6 +1,6 @@
 import torch.nn as nn
 import torch
-from mmdet.core import bbox2result, bbox2roi
+from mmdet.core import bbox2result, bbox2roi, point2roi
 from .. import builder
 from ..registry import DETECTORS
 from .base import BaseDetector
@@ -57,13 +57,13 @@ class SingleStageDetector(BaseDetector):
         x = self.extract_feat(img)
         outs = self.bbox_head(x)
         loss_inputs = outs + (gt_bboxes, gt_labels, img_metas, self.train_cfg)
-        losses = self.bbox_head.loss(
+        losses, bbox_pred_init, labels_list_init = self.bbox_head.loss(
             *loss_inputs, gt_bboxes_ignore=gt_bboxes_ignore)
 
         if self.train_cfg.with_reid:
             bbox_feats = self.bbox_roi_extractor(
-                x[:self.bbox_roi_extractor.num_inputs], bbox2roi(gt_bboxes))
-            loss_reid = self.reid_head(bbox_feats, gt_labels)
+                x[:self.bbox_roi_extractor.num_inputs], bbox2roi(bbox_pred_init[0]))
+            loss_reid = self.reid_head(bbox_feats, labels_list_init)
             losses.update(loss_reid)
         return losses
 

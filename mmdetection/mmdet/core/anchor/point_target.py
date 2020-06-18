@@ -69,7 +69,7 @@ def point_target(proposals_list,
     proposal_weights_list = images_to_levels(all_proposal_weights,
                                              num_level_proposals)
     return (labels_list, label_weights_list, bbox_gt_list, proposals_list,
-            proposal_weights_list, num_total_pos, num_total_neg)
+            proposal_weights_list, num_total_pos, num_total_neg, all_label_weights, all_proposal_weights)
 
 
 def images_to_levels(target, num_level_grids):

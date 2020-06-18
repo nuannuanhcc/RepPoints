@@ -125,6 +125,28 @@ def bbox2roi(bbox_list):
     return rois
 
 
+def point2roi(point_list):
+    """Convert a list of bboxes to roi format.
+
+    Args:
+        bbox_list (list[Tensor]): a list of bboxes corresponding to a batch
+            of images.
+
+    Returns:
+        Tensor: shape (n, 5), [batch_ind, x1, y1, x2, y2]
+    """
+    rois_list = []
+    for img_id, points in enumerate(point_list):
+        if points.size(0) > 0:
+            img_inds = points.new_full((points.size(0), 1), img_id)
+            rois = torch.cat([img_inds, points[:, :18]], dim=-1)
+        else:
+            rois = points.new_zeros((0, 19))
+        rois_list.append(rois)
+    rois = torch.cat(rois_list, 0)
+    return rois
+
+
 def roi2bbox(rois):
     bbox_list = []
     img_ids = torch.unique(rois[:, 0].cpu(), sorted=True)

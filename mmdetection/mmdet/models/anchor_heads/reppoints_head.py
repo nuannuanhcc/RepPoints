@@ -445,8 +445,22 @@ class RepPointsHead(nn.Module):
             gt_labels_list=gt_labels,
             label_channels=label_channels,
             sampling=self.sampling)
-        (*_, bbox_gt_list_init, candidate_list_init, bbox_weights_list_init,
-         num_total_pos_init, num_total_neg_init) = cls_reg_targets_init
+
+        (labels_list_init, label_weights_list_init, bbox_gt_list_init, candidate_list_init, bbox_weights_list_init,
+         num_total_pos_init, num_total_neg_init,
+         all_label_weights_init, all_proposal_weights_init) = cls_reg_targets_init
+
+        labels_list_init = [torch.cat(i) for i in list(zip(*labels_list_init))]  # levels_to_images
+        labels_list_init = [label[weight[:, 0] > 0] for label, weight in
+                            zip(labels_list_init, all_proposal_weights_init)]
+
+        pts_coord_init = [torch.cat(i) for i in list(zip(*pts_coordinate_preds_init))]  # levels_to_images
+        pts_coord_init = [point[weight[:, 0] > 0] for point, weight in
+                          zip(pts_coord_init, all_proposal_weights_init)]
+
+        bbox_pred_init = self.points2bbox(torch.cat(pts_coord_init, dim=0), y_first=False)
+        bbox_pred_init = bbox_pred_init.split([point.shape[0] for point in pts_coord_init])
+
         num_total_samples_init = (
             num_total_pos_init +
             num_total_neg_init if self.sampling else num_total_pos_init)
@@ -480,7 +494,7 @@ class RepPointsHead(nn.Module):
             sampling=self.sampling)
         (labels_list, label_weights_list, bbox_gt_list_refine,
          candidate_list_refine, bbox_weights_list_refine, num_total_pos_refine,
-         num_total_neg_refine) = cls_reg_targets_refine
+         num_total_neg_refine, all_label_weights_refine, all_proposal_weights_refine) = cls_reg_targets_refine
         num_total_samples_refine = (
             num_total_pos_refine +
             num_total_neg_refine if self.sampling else num_total_pos_refine)
@@ -505,7 +519,7 @@ class RepPointsHead(nn.Module):
             'loss_pts_init': losses_pts_init,
             'loss_pts_refine': losses_pts_refine
         }
-        return loss_dict_all
+        return loss_dict_all, [bbox_pred_init], labels_list_init
 
     def get_bboxes(self,
                    cls_scores,
