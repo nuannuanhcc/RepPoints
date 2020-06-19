@@ -2,7 +2,7 @@
 norm_cfg = dict(type='GN', num_groups=32, requires_grad=True)
 with_reid = True
 img_size = (1500, 900)  # (1333, 800), (1500, 900)
-work_dir = './work_dirs/reppoints_moment_r50_fpn_2x_6_15_8'
+work_dir = './work_dirs/reppoints_moment_r50_fpn_2x_6_19_2'
 model = dict(
     type='RepPointsDetector',
     pretrained='modelzoo://resnet50',
