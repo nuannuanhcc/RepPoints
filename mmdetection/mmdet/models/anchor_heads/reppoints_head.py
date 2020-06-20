@@ -555,6 +555,8 @@ class RepPointsHead(nn.Module):
         assert len(cls_scores) == len(bbox_preds) == len(mlvl_points)
         mlvl_bboxes = []
         mlvl_scores = []
+        num_each_level = [i.shape[0] for i in mlvl_points]
+        mlvl_index = list(torch.arange(sum(num_each_level)).split(num_each_level))
         for i_lvl, (cls_score, bbox_pred, points) in enumerate(
                 zip(cls_scores, bbox_preds, mlvl_points)):
             assert cls_score.size()[-2:] == bbox_pred.size()[-2:]
@@ -575,6 +577,7 @@ class RepPointsHead(nn.Module):
                 points = points[topk_inds, :]
                 bbox_pred = bbox_pred[topk_inds, :]
                 scores = scores[topk_inds, :]
+                mlvl_index[i_lvl] = mlvl_index[i_lvl][topk_inds]
             bbox_pos_center = torch.cat([points[:, :2], points[:, :2]], dim=1)
             bboxes = bbox_pred * self.point_strides[i_lvl] + bbox_pos_center
             x1 = bboxes[:, 0].clamp(min=0, max=img_shape[1])
@@ -585,6 +588,7 @@ class RepPointsHead(nn.Module):
             mlvl_bboxes.append(bboxes)
             mlvl_scores.append(scores)
         mlvl_bboxes = torch.cat(mlvl_bboxes)
+        mlvl_index = torch.cat(mlvl_index)
         if rescale:
             mlvl_bboxes /= mlvl_bboxes.new_tensor(scale_factor)
         mlvl_scores = torch.cat(mlvl_scores)
@@ -592,9 +596,9 @@ class RepPointsHead(nn.Module):
             padding = mlvl_scores.new_zeros(mlvl_scores.shape[0], 1)
             mlvl_scores = torch.cat([padding, mlvl_scores], dim=1)
         if nms:
-            det_bboxes, det_labels = multiclass_nms(mlvl_bboxes, mlvl_scores,
+            det_index, det_bboxes, det_labels = multiclass_nms(mlvl_index, mlvl_bboxes, mlvl_scores,
                                                     cfg.score_thr, cfg.nms,
                                                     cfg.max_per_img)
-            return det_bboxes, det_labels
+            return det_bboxes, det_labels, det_index
         else:
             return mlvl_bboxes, mlvl_scores

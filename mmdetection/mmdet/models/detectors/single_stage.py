@@ -85,7 +85,7 @@ class SingleStageDetector(BaseDetector):
         bbox_list = self.bbox_head.get_bboxes(*bbox_inputs)
         bbox_results = [
             bbox2result(det_bboxes, det_labels, self.bbox_head.num_classes)
-            for det_bboxes, det_labels in bbox_list
+            for det_bboxes, det_labels, _ in bbox_list
         ]
         if not self.test_cfg.with_reid:  # detection
             return bbox_results[0]
