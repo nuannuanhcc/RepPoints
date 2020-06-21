@@ -453,15 +453,15 @@ class RepPointsHead(nn.Module):
          num_total_pos_init, num_total_neg_init,
          all_label_weights_init, all_proposal_weights_init) = cls_reg_targets_init
 
-        cls_deconv = [cls.view(*cls.shape[:2], -1).permute(0, 2, 1)
-                      for cls in cls_deconv]   # list[n,c,h,w] -> list[n,c,hw] -> list[n,hw,c]
-        cls_deconv = [torch.cat(i) for i in list(zip(*cls_deconv))]  # list_l[n,hw,c] -> list_n[sum_l(hw),c]
-        cls_deconv = [cls[weight[:, 0] > 0] for cls, weight in
-                          zip(cls_deconv, all_proposal_weights_init)]
-
-        labels_list_init = [torch.cat(i) for i in list(zip(*labels_list_init))]  # levels_to_images
-        labels_list_init = [label[weight[:, 0] > 0] for label, weight in
-                            zip(labels_list_init, all_proposal_weights_init)]
+        # cls_deconv = [cls.view(*cls.shape[:2], -1).permute(0, 2, 1)
+        #               for cls in cls_deconv]   # list[n,c,h,w] -> list[n,c,hw] -> list[n,hw,c]
+        # cls_deconv = [torch.cat(i) for i in list(zip(*cls_deconv))]  # list_l[n,hw,c] -> list_n[sum_l(hw),c]
+        # cls_deconv = [cls[weight[:, 0] > 0] for cls, weight in
+        #                   zip(cls_deconv, all_proposal_weights_init)]
+        #
+        # labels_list_init = [torch.cat(i) for i in list(zip(*labels_list_init))]  # levels_to_images
+        # labels_list_init = [label[weight[:, 0] > 0] for label, weight in
+        #                     zip(labels_list_init, all_proposal_weights_init)]
 
         num_total_samples_init = (
             num_total_pos_init +
@@ -501,6 +501,16 @@ class RepPointsHead(nn.Module):
             num_total_pos_refine +
             num_total_neg_refine if self.sampling else num_total_pos_refine)
 
+        cls_deconv = [cls.view(*cls.shape[:2], -1).permute(0, 2, 1)
+                      for cls in cls_deconv]   # list[n,c,h,w] -> list[n,c,hw] -> list[n,hw,c]
+        cls_deconv = [torch.cat(i) for i in list(zip(*cls_deconv))]  # list_l[n,hw,c] -> list_n[sum_l(hw),c]
+        cls_deconv = [cls[weight[:, 0] > 0] for cls, weight in
+                          zip(cls_deconv, all_proposal_weights_refine)]
+
+        labels_list_refine = [torch.cat(i) for i in list(zip(*labels_list))]  # levels_to_images
+        labels_list_refine = [label[weight[:, 0] > 0] for label, weight in
+                            zip(labels_list_refine, all_proposal_weights_refine)]
+
         # compute loss
         losses_cls, losses_pts_init, losses_pts_refine = multi_apply(
             self.loss_single,
@@ -521,7 +531,7 @@ class RepPointsHead(nn.Module):
             'loss_pts_init': losses_pts_init,
             'loss_pts_refine': losses_pts_refine
         }
-        return loss_dict_all, cls_deconv, labels_list_init
+        return loss_dict_all, cls_deconv, labels_list_refine
 
     def get_bboxes(self,
                    cls_deconv,
