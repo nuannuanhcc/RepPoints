@@ -449,9 +449,9 @@ class RepPointsHead(nn.Module):
             label_channels=label_channels,
             sampling=self.sampling)
 
-        (labels_list_init, label_weights_list_init, bbox_gt_list_init, candidate_list_init, bbox_weights_list_init,
+        (labels_list_init, _, label_weights_list_init, bbox_gt_list_init, candidate_list_init, bbox_weights_list_init,
          num_total_pos_init, num_total_neg_init,
-         all_label_weights_init, all_proposal_weights_init) = cls_reg_targets_init
+         all_label_weights_init, all_proposal_weights_init, _) = cls_reg_targets_init
 
         # cls_deconv = [cls.view(*cls.shape[:2], -1).permute(0, 2, 1)
         #               for cls in cls_deconv]   # list[n,c,h,w] -> list[n,c,hw] -> list[n,hw,c]
@@ -494,9 +494,9 @@ class RepPointsHead(nn.Module):
             gt_labels_list=gt_labels,
             label_channels=label_channels,
             sampling=self.sampling)
-        (labels_list, label_weights_list, bbox_gt_list_refine,
-         candidate_list_refine, bbox_weights_list_refine, num_total_pos_refine,
-         num_total_neg_refine, all_label_weights_refine, all_proposal_weights_refine) = cls_reg_targets_refine
+        (labels_list, labels_list_iou_max, label_weights_list, bbox_gt_list_refine, candidate_list_refine,
+         bbox_weights_list_refine, num_total_pos_refine, num_total_neg_refine, all_label_weights_refine,
+         all_proposal_weights_refine, all_proposal_weights_refine_iou_max) = cls_reg_targets_refine
         num_total_samples_refine = (
             num_total_pos_refine +
             num_total_neg_refine if self.sampling else num_total_pos_refine)
@@ -505,11 +505,11 @@ class RepPointsHead(nn.Module):
                       for cls in cls_deconv]   # list[n,c,h,w] -> list[n,c,hw] -> list[n,hw,c]
         cls_deconv = [torch.cat(i) for i in list(zip(*cls_deconv))]  # list_l[n,hw,c] -> list_n[sum_l(hw),c]
         cls_deconv = [cls[weight[:, 0] > 0] for cls, weight in
-                          zip(cls_deconv, all_proposal_weights_refine)]
+                          zip(cls_deconv, all_proposal_weights_refine_iou_max)]
 
-        labels_list_refine = [torch.cat(i) for i in list(zip(*labels_list))]  # levels_to_images
+        labels_list_refine = [torch.cat(i) for i in list(zip(*labels_list_iou_max))]  # levels_to_images
         labels_list_refine = [label[weight[:, 0] > 0] for label, weight in
-                            zip(labels_list_refine, all_proposal_weights_refine)]
+                            zip(labels_list_refine, all_proposal_weights_refine_iou_max)]
 
         # compute loss
         losses_cls, losses_pts_init, losses_pts_refine = multi_apply(
