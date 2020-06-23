@@ -110,6 +110,7 @@ class RepPointsHead(nn.Module):
         self.relu = nn.ReLU(inplace=True)
         self.cls_convs = nn.ModuleList()
         self.reg_convs = nn.ModuleList()
+        self.reid_convs = nn.ModuleList()
         for i in range(self.stacked_convs):
             chn = self.in_channels if i == 0 else self.feat_channels
             self.cls_convs.append(
@@ -122,6 +123,15 @@ class RepPointsHead(nn.Module):
                     conv_cfg=self.conv_cfg,
                     norm_cfg=self.norm_cfg))
             self.reg_convs.append(
+                ConvModule(
+                    chn,
+                    self.feat_channels,
+                    3,
+                    stride=1,
+                    padding=1,
+                    conv_cfg=self.conv_cfg,
+                    norm_cfg=self.norm_cfg))
+            self.reid_convs.append(
                 ConvModule(
                     chn,
                     self.feat_channels,
@@ -147,11 +157,16 @@ class RepPointsHead(nn.Module):
                                                     self.dcn_pad)
         self.reppoints_pts_refine_out = nn.Conv2d(self.point_feat_channels,
                                                   pts_out_dim, 1, 1, 0)
+        self.reppoints_reid_conv = DeformConv(self.feat_channels,
+                                              self.point_feat_channels,
+                                              self.dcn_kernel, 1, self.dcn_pad)
 
     def init_weights(self):
         for m in self.cls_convs:
             normal_init(m.conv, std=0.01)
         for m in self.reg_convs:
+            normal_init(m.conv, std=0.01)
+        for m in self.reid_convs:
             normal_init(m.conv, std=0.01)
         bias_cls = bias_init_with_prob(0.01)
         normal_init(self.reppoints_cls_conv, std=0.01)
@@ -160,6 +175,7 @@ class RepPointsHead(nn.Module):
         normal_init(self.reppoints_pts_init_out, std=0.01)
         normal_init(self.reppoints_pts_refine_conv, std=0.01)
         normal_init(self.reppoints_pts_refine_out, std=0.01)
+        normal_init(self.reppoints_reid_conv, std=0.01)
 
     def points2bbox(self, pts, y_first=True):
         """
@@ -260,10 +276,13 @@ class RepPointsHead(nn.Module):
             points_init = 0
         cls_feat = x
         pts_feat = x
+        reid_feat = x
         for cls_conv in self.cls_convs:
             cls_feat = cls_conv(cls_feat)
         for reg_conv in self.reg_convs:
             pts_feat = reg_conv(pts_feat)
+        for reid_conv in self.reid_convs:
+            reid_feat = reid_conv(reid_feat)
         # initialize reppoints
         pts_out_init = self.reppoints_pts_init_out(
             self.relu(self.reppoints_pts_init_conv(pts_feat)))
@@ -280,6 +299,8 @@ class RepPointsHead(nn.Module):
         cls_deconv = self.reppoints_cls_conv(cls_feat, dcn_offset)
         cls_out = self.reppoints_cls_out(self.relu(cls_deconv))
 
+        reid_deconv = self.reppoints_reid_conv(reid_feat, dcn_offset)
+
         pts_out_refine = self.reppoints_pts_refine_out(
             self.relu(self.reppoints_pts_refine_conv(pts_feat, dcn_offset)))
         if self.use_grid_points:
@@ -287,7 +308,7 @@ class RepPointsHead(nn.Module):
                 pts_out_refine, bbox_out_init.detach())
         else:
             pts_out_refine = pts_out_refine + pts_out_init.detach()
-        return cls_deconv, cls_out, pts_out_init, pts_out_refine
+        return reid_deconv, cls_out, pts_out_init, pts_out_refine
 
     def forward(self, feats):
         return multi_apply(self.forward_single, feats)
