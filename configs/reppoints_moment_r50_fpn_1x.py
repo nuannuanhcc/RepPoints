@@ -50,7 +50,8 @@ model = dict(
         transform_method='moment'),
     bbox_roi_extractor=dict(
         type='SingleRoIExtractor',
-        roi_layer=dict(type='RoIAlign', out_size=7, sample_num=2),
+        roi_layer=dict(type='RoIAlign', out_size=(7, 7), sample_num=2),
+        # roi_layer=dict(type='ModulatedDeformRoIPoolingPack', out_size=7, out_channels=256, no_trans=False, trans_std=0.1),
         out_channels=256,
         featmap_strides=[8, 16, 32, 64]))
 # training and testing settings
