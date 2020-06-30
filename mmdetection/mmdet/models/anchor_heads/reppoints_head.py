@@ -110,7 +110,6 @@ class RepPointsHead(nn.Module):
         self.relu = nn.ReLU(inplace=True)
         self.cls_convs = nn.ModuleList()
         self.reg_convs = nn.ModuleList()
-        self.reid_convs = nn.ModuleList()
         for i in range(self.stacked_convs):
             chn = self.in_channels if i == 0 else self.feat_channels
             self.cls_convs.append(
@@ -123,15 +122,6 @@ class RepPointsHead(nn.Module):
                     conv_cfg=self.conv_cfg,
                     norm_cfg=self.norm_cfg))
             self.reg_convs.append(
-                ConvModule(
-                    chn,
-                    self.feat_channels,
-                    3,
-                    stride=1,
-                    padding=1,
-                    conv_cfg=self.conv_cfg,
-                    norm_cfg=self.norm_cfg))
-            self.reid_convs.append(
                 ConvModule(
                     chn,
                     self.feat_channels,
@@ -158,15 +148,13 @@ class RepPointsHead(nn.Module):
         self.reppoints_pts_refine_out = nn.Conv2d(self.point_feat_channels,
                                                   pts_out_dim, 1, 1, 0)
         self.reppoints_reid_conv = DeformConv(self.feat_channels,
-                                              self.point_feat_channels,
+                                              2048,
                                               self.dcn_kernel, 1, self.dcn_pad)
 
     def init_weights(self):
         for m in self.cls_convs:
             normal_init(m.conv, std=0.01)
         for m in self.reg_convs:
-            normal_init(m.conv, std=0.01)
-        for m in self.reid_convs:
             normal_init(m.conv, std=0.01)
         bias_cls = bias_init_with_prob(0.01)
         normal_init(self.reppoints_cls_conv, std=0.01)
@@ -281,8 +269,6 @@ class RepPointsHead(nn.Module):
             cls_feat = cls_conv(cls_feat)
         for reg_conv in self.reg_convs:
             pts_feat = reg_conv(pts_feat)
-        for reid_conv in self.reid_convs:
-            reid_feat = reid_conv(reid_feat)
         # initialize reppoints
         pts_out_init = self.reppoints_pts_init_out(
             self.relu(self.reppoints_pts_init_conv(pts_feat)))
