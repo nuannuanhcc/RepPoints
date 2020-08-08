@@ -1,8 +1,8 @@
 # model settings
 norm_cfg = dict(type='GN', num_groups=32, requires_grad=True)
 with_reid = True
-img_size = (1500, 900)  # (1333, 800), (1500, 900)
-work_dir = './work_dirs/reppoints_moment_r50_fpn_1x_7_4_1'
+img_size = (1333, 800)  # (1333, 800), (1500, 900)
+work_dir = './work_dirs/test'
 #
 num_images = 3
 dataset_type = 'SysuDataset'
