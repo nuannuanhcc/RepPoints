@@ -34,6 +34,7 @@ class Runner(object):
     def __init__(self,
                  model,
                  batch_processor,
+                 reid_loss_evaluator,
                  optimizer=None,
                  work_dir=None,
                  log_level=logging.INFO,
@@ -45,7 +46,7 @@ class Runner(object):
         else:
             self.optimizer = None
         self.batch_processor = batch_processor
-
+        self.reid_loss_evaluator = reid_loss_evaluator
         # create work_dir
         if mmcv.is_str(work_dir):
             self.work_dir = osp.abspath(work_dir)
@@ -261,7 +262,7 @@ class Runner(object):
             self._inner_iter = i
             self.call_hook('before_train_iter')
             outputs = self.batch_processor(
-                self.model, data_batch, train_mode=True, **kwargs)
+                self.model, self.reid_loss_evaluator, data_batch, train_mode=True, **kwargs)
             if not isinstance(outputs, dict):
                 raise TypeError('batch_processor() must return a dict')
             if 'log_vars' in outputs:
