@@ -85,7 +85,7 @@ class OIMLossComputation(nn.Module):
         else:
             raise KeyError(cfg.DATASETS.TRAIN)
 
-        self.lut_momentum = 0.0
+        self.lut_momentum = 0.5
         self.out_channels = 2048
 
         self.register_buffer('lut', torch.zeros(self.num_pid, self.out_channels).cuda())
@@ -161,6 +161,6 @@ class CIRCLELossComputation(nn.Module):
 
 
 def make_reid_loss_evaluator(cfg):
-    # loss_evaluator = OIMLossComputation(cfg)
-    loss_evaluator = CIRCLELossComputation(cfg)
+    loss_evaluator = OIMLossComputation(cfg)
+    # loss_evaluator = CIRCLELossComputation(cfg)
     return loss_evaluator
